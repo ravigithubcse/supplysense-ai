@@ -1,0 +1,278 @@
+---
+# API Gateway
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: api-gateway }
+  template:
+    metadata:
+      labels: { app: api-gateway }
+    spec:
+      containers:
+        - name: api-gateway
+          image: supplysense/api-gateway:latest
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef: { name: supplysense-config }
+            - secretRef:    { name: supplysense-secrets }
+          resources:
+            requests: { memory: "256Mi", cpu: "100m" }
+            limits:   { memory: "512Mi", cpu: "500m" }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /actuator/health, port: 8080 }
+            initialDelaySeconds: 60
+            periodSeconds: 30
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: api-gateway
+  namespace: supplysense
+spec:
+  selector: { app: api-gateway }
+  ports:
+    - port: 8080
+      targetPort: 8080
+  type: ClusterIP
+---
+# Auth Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: auth-service
+  namespace: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: auth-service }
+  template:
+    metadata:
+      labels: { app: auth-service }
+    spec:
+      containers:
+        - name: auth-service
+          image: supplysense/auth-service:latest
+          ports:
+            - containerPort: 8081
+          envFrom:
+            - configMapRef: { name: supplysense-config }
+            - secretRef:    { name: supplysense-secrets }
+          resources:
+            requests: { memory: "256Mi", cpu: "100m" }
+            limits:   { memory: "512Mi", cpu: "500m" }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8081 }
+            initialDelaySeconds: 40
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth-service
+  namespace: supplysense
+spec:
+  selector: { app: auth-service }
+  ports:
+    - port: 8081
+      targetPort: 8081
+---
+# Supply Chain Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: supply-chain-service
+  namespace: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: supply-chain-service }
+  template:
+    metadata:
+      labels: { app: supply-chain-service }
+    spec:
+      containers:
+        - name: supply-chain-service
+          image: supplysense/supply-chain-service:latest
+          ports:
+            - containerPort: 8082
+          envFrom:
+            - configMapRef: { name: supplysense-config }
+            - secretRef:    { name: supplysense-secrets }
+          resources:
+            requests: { memory: "256Mi", cpu: "100m" }
+            limits:   { memory: "512Mi", cpu: "500m" }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8082 }
+            initialDelaySeconds: 40
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: supply-chain-service
+  namespace: supplysense
+spec:
+  selector: { app: supply-chain-service }
+  ports:
+    - port: 8082
+      targetPort: 8082
+---
+# Risk Engine Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: risk-engine-service
+  namespace: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: risk-engine-service }
+  template:
+    metadata:
+      labels: { app: risk-engine-service }
+    spec:
+      containers:
+        - name: risk-engine-service
+          image: supplysense/risk-engine-service:latest
+          ports:
+            - containerPort: 8083
+          envFrom:
+            - configMapRef: { name: supplysense-config }
+            - secretRef:    { name: supplysense-secrets }
+          resources:
+            requests: { memory: "512Mi", cpu: "200m" }
+            limits:   { memory: "1Gi",   cpu: "1000m" }
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8083 }
+            initialDelaySeconds: 45
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: risk-engine-service
+  namespace: supplysense
+spec:
+  selector: { app: risk-engine-service }
+  ports:
+    - port: 8083
+      targetPort: 8083
+---
+# AI Service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+  namespace: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: ai-service }
+  template:
+    metadata:
+      labels: { app: ai-service }
+    spec:
+      containers:
+        - name: ai-service
+          image: supplysense/ai-service:latest
+          ports:
+            - containerPort: 8090
+          envFrom:
+            - configMapRef: { name: supplysense-config }
+            - secretRef:    { name: supplysense-secrets }
+          resources:
+            requests: { memory: "1Gi",  cpu: "500m" }
+            limits:   { memory: "2Gi",  cpu: "2000m" }
+          readinessProbe:
+            httpGet: { path: /health, port: 8090 }
+            initialDelaySeconds: 60
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-service
+  namespace: supplysense
+spec:
+  selector: { app: ai-service }
+  ports:
+    - port: 8090
+      targetPort: 8090
+---
+# Frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: supplysense
+spec:
+  replicas: 2
+  selector:
+    matchLabels: { app: frontend }
+  template:
+    metadata:
+      labels: { app: frontend }
+    spec:
+      containers:
+        - name: frontend
+          image: supplysense/frontend:latest
+          ports:
+            - containerPort: 80
+          resources:
+            requests: { memory: "64Mi",  cpu: "50m" }
+            limits:   { memory: "128Mi", cpu: "200m" }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: supplysense
+spec:
+  selector: { app: frontend }
+  ports:
+    - port: 80
+      targetPort: 80
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: supplysense-ingress
+  namespace: supplysense
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [supplysense.yourdomain.com]
+      secretName: supplysense-tls
+  rules:
+    - host: supplysense.yourdomain.com
+      http:
+        paths:
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: api-gateway
+                port: { number: 8080 }
+          - path: /ws
+            pathType: Prefix
+            backend:
+              service:
+                name: event-processor-service
+                port: { number: 8084 }
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: frontend
+                port: { number: 80 }

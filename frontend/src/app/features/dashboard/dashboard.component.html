@@ -1,0 +1,182 @@
+<div class="p-6 space-y-6">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between">
+    <div>
+      <h1 class="text-2xl font-bold text-white">Risk Dashboard</h1>
+      <p class="text-slate-400 text-sm mt-0.5">
+        Real-time supply chain intelligence
+        <span *ngIf="lastUpdated$ | async as t" class="ml-2 text-slate-500">
+          · Updated {{ t | date:'HH:mm:ss' }}
+        </span>
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <span class="flex items-center gap-1.5 text-xs text-green-400">
+        <span class="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+        Live
+      </span>
+    </div>
+  </div>
+
+  <!-- Loading skeleton -->
+  <div *ngIf="isLoading$ | async" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+    <div *ngFor="let i of [1,2,3,4]" class="h-28 bg-slate-800 rounded-xl animate-pulse"></div>
+  </div>
+
+  <!-- KPI Cards -->
+  <div *ngIf="stats$ | async as stats" class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+
+    <!-- Total Suppliers -->
+    <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-slate-400 text-xs font-medium uppercase tracking-wide">Total Suppliers</p>
+          <p class="text-3xl font-bold text-white mt-1">{{ stats.totalSuppliers }}</p>
+        </div>
+        <div class="w-10 h-10 bg-blue-500/10 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Avg Risk Score -->
+    <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-slate-400 text-xs font-medium uppercase tracking-wide">Avg Risk Score</p>
+          <p class="text-3xl font-bold text-white mt-1">{{ stats.averageRiskScore | number:'1.1-1' }}</p>
+        </div>
+        <div class="w-10 h-10 bg-yellow-500/10 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="mt-3 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+        <div class="h-full rounded-full transition-all" [style.width]="getRiskBarWidth(stats.averageRiskScore)" [ngClass]="getRiskBarColor(stats.averageRiskScore)"></div>
+      </div>
+    </div>
+
+    <!-- Critical Risk -->
+    <div class="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-red-300 text-xs font-medium uppercase tracking-wide">Critical Risk</p>
+          <p class="text-3xl font-bold text-red-400 mt-1">{{ stats.criticalRiskCount }}</p>
+          <p class="text-xs text-red-300/70 mt-0.5">suppliers</p>
+        </div>
+        <div class="w-10 h-10 bg-red-500/20 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active Alerts -->
+    <div class="bg-orange-500/5 border border-orange-500/20 rounded-xl p-5">
+      <div class="flex items-start justify-between">
+        <div>
+          <p class="text-orange-300 text-xs font-medium uppercase tracking-wide">Active Alerts</p>
+          <p class="text-3xl font-bold text-orange-400 mt-1">{{ stats.activeAlerts }}</p>
+          <p class="text-xs text-orange-300/70 mt-0.5">{{ stats.criticalAlerts }} critical</p>
+        </div>
+        <div class="w-10 h-10 bg-orange-500/20 rounded-lg flex items-center justify-center">
+          <svg class="w-5 h-5 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main grid: Scores table + Recent alerts -->
+  <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+
+    <!-- Risk Scores Table -->
+    <div class="xl:col-span-2 bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-700/50 flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-white">Supplier Risk Scores</h2>
+        <span class="text-xs text-slate-400">Live · updates via WebSocket</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-700/50">
+              <th class="text-left px-5 py-3 text-xs font-medium text-slate-400 uppercase tracking-wide">Supplier</th>
+              <th class="text-left px-3 py-3 text-xs font-medium text-slate-400 uppercase tracking-wide">Risk Level</th>
+              <th class="text-left px-3 py-3 text-xs font-medium text-slate-400 uppercase tracking-wide">Score</th>
+              <th class="text-left px-3 py-3 text-xs font-medium text-slate-400 uppercase tracking-wide hidden md:table-cell">7d Forecast</th>
+              <th class="text-left px-3 py-3 text-xs font-medium text-slate-400 uppercase tracking-wide hidden lg:table-cell">30d Forecast</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let s of (scores$ | async); trackBy: trackBySupplier"
+                class="border-b border-slate-700/30 hover:bg-slate-700/20 transition-colors">
+              <td class="px-5 py-3 text-slate-200 font-medium font-mono text-xs">{{ s.supplierId | slice:0:8 }}…</td>
+              <td class="px-3 py-3">
+                <span class="px-2 py-0.5 rounded-full text-xs font-semibold border"
+                  [ngClass]="getRiskBg(s.riskLevel)">
+                  <span [ngClass]="getRiskColor(s.riskLevel)">{{ s.riskLevel }}</span>
+                </span>
+              </td>
+              <td class="px-3 py-3">
+                <div class="flex items-center gap-2">
+                  <div class="w-16 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                    <div class="h-full rounded-full" [style.width]="getRiskBarWidth(s.compositeScore)" [ngClass]="getRiskBarColor(s.compositeScore)"></div>
+                  </div>
+                  <span class="text-white font-mono text-xs">{{ s.compositeScore | number:'1.1-1' }}</span>
+                </div>
+              </td>
+              <td class="px-3 py-3 hidden md:table-cell">
+                <span [ngClass]="getRiskColor(s.riskLevel)" class="font-mono text-xs">
+                  {{ s.forecastScore7d | number:'1.1-1' }}
+                </span>
+              </td>
+              <td class="px-3 py-3 hidden lg:table-cell">
+                <span [ngClass]="getRiskColor(s.riskLevel)" class="font-mono text-xs">
+                  {{ s.forecastScore30d | number:'1.1-1' }}
+                </span>
+              </td>
+            </tr>
+            <tr *ngIf="(scores$ | async)?.length === 0">
+              <td colspan="5" class="px-5 py-8 text-center text-slate-500 text-sm">
+                No risk scores available yet.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Recent Alerts -->
+    <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl overflow-hidden">
+      <div class="px-5 py-4 border-b border-slate-700/50">
+        <h2 class="text-sm font-semibold text-white">Recent Alerts</h2>
+      </div>
+      <div class="divide-y divide-slate-700/30">
+        <div *ngFor="let alert of (recentAlerts$ | async); trackBy: trackByAlert"
+             class="px-5 py-4 hover:bg-slate-700/20 transition-colors">
+          <div class="flex items-start gap-3">
+            <div class="w-2 h-2 rounded-full mt-1.5 shrink-0" [ngClass]="getSeverityColor(alert.severity)"></div>
+            <div class="min-w-0">
+              <p class="text-sm text-white font-medium truncate">{{ alert.title }}</p>
+              <p class="text-xs text-slate-400 mt-0.5 line-clamp-2">{{ alert.description }}</p>
+              <div class="flex items-center gap-2 mt-1.5">
+                <span class="text-[10px] text-slate-500">{{ alert.createdAt | date:'MMM d, HH:mm' }}</span>
+                <span *ngIf="alert.affectedCountry" class="text-[10px] text-slate-500">· {{ alert.affectedCountry }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div *ngIf="(recentAlerts$ | async)?.length === 0" class="px-5 py-8 text-center text-slate-500 text-sm">
+          No active alerts
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>

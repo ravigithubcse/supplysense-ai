@@ -1,0 +1,143 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_dev_password}
+      timeout: 2000ms
+  cloud:
+    gateway:
+      default-filters:
+        - DedupeResponseHeader=Access-Control-Allow-Credentials Access-Control-Allow-Origin
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowedOriginPatterns:
+              - "http://localhost:4200"
+              - "http://localhost:*"
+            allowedMethods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowedHeaders:
+              - "*"
+            allowCredentials: true
+            maxAge: 3600
+      routes:
+        # Auth Service
+        - id: auth-service
+          uri: ${AUTH_SERVICE_URL:http://localhost:8081}
+          predicates:
+            - Path=/api/v1/auth/**
+          filters:
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 20
+                redis-rate-limiter.burstCapacity: 40
+                redis-rate-limiter.requestedTokens: 1
+            - AddRequestHeader=X-Gateway-Source, supplysense-gateway
+
+        # Supply Chain Service
+        - id: supply-chain-service
+          uri: ${SUPPLY_CHAIN_SERVICE_URL:http://localhost:8082}
+          predicates:
+            - Path=/api/v1/suppliers/**, /api/v1/products/**, /api/v1/routes/**, /api/v1/warehouses/**
+          filters:
+            - AuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 100
+                redis-rate-limiter.burstCapacity: 200
+            - name: CircuitBreaker
+              args:
+                name: supply-chain-cb
+                fallbackUri: forward:/fallback/supply-chain
+
+        # Risk Engine Service
+        - id: risk-engine-service
+          uri: ${RISK_ENGINE_SERVICE_URL:http://localhost:8083}
+          predicates:
+            - Path=/api/v1/risk/**
+          filters:
+            - AuthenticationFilter
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter.replenishRate: 50
+                redis-rate-limiter.burstCapacity: 100
+            - name: CircuitBreaker
+              args:
+                name: risk-engine-cb
+                fallbackUri: forward:/fallback/risk
+
+        # Event Processor WebSocket
+        - id: event-processor-ws
+          uri: ${EVENT_PROCESSOR_SERVICE_URL:http://localhost:8084}
+          predicates:
+            - Path=/ws/**
+          filters:
+            - AuthenticationFilter
+
+        # Notification Service
+        - id: notification-service
+          uri: ${NOTIFICATION_SERVICE_URL:http://localhost:8085}
+          predicates:
+            - Path=/api/v1/notifications/**
+          filters:
+            - AuthenticationFilter
+
+jwt:
+  secret: ${JWT_SECRET:supplysense_jwt_secret_key_for_development_only_change_in_prod}
+  expiration: 900000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics,gateway
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    com.supplysense: DEBUG
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%thread] %-5level [%X{traceId}/%X{spanId}] %logger{36} - %msg%n"
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 5s
+        failureRateThreshold: 50
+    instances:
+      supply-chain-cb:
+        baseConfig: default
+      risk-engine-cb:
+        baseConfig: default
+
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  data:
+    redis:
+      host: redis

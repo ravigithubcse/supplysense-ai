@@ -1,0 +1,430 @@
+version: '3.9'
+
+networks:
+  supplysense-network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+volumes:
+  postgres-data:
+  redis-data:
+  elasticsearch-data:
+  kafka-data:
+  zookeeper-data:
+  grafana-data:
+  prometheus-data:
+  minio-data:
+
+services:
+  # ============================================================
+  # INFRASTRUCTURE SERVICES
+  # ============================================================
+
+  postgres:
+    image: timescale/timescaledb:latest-pg16
+    container_name: supplysense-postgres
+    environment:
+      POSTGRES_USER: supplysense
+      POSTGRES_PASSWORD: supplysense_dev_password
+      POSTGRES_DB: supplysense
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-scripts/postgres:/docker-entrypoint-initdb.d
+    networks:
+      - supplysense-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U supplysense"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.2-alpine
+    container_name: supplysense-redis
+    command: redis-server --requirepass redis_dev_password --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - supplysense-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis_dev_password", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.5.0
+    container_name: supplysense-zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    volumes:
+      - zookeeper-data:/var/lib/zookeeper
+    networks:
+      - supplysense-network
+    healthcheck:
+      test: ["CMD", "nc", "-z", "localhost", "2181"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kafka:
+    image: confluentinc/cp-kafka:7.5.0
+    container_name: supplysense-kafka
+    depends_on:
+      zookeeper:
+        condition: service_healthy
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      KAFKA_LOG_RETENTION_HOURS: 168
+    volumes:
+      - kafka-data:/var/lib/kafka/data
+    networks:
+      - supplysense-network
+    healthcheck:
+      test: ["CMD", "kafka-broker-api-versions", "--bootstrap-server", "localhost:9092"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: supplysense-kafka-ui
+    depends_on:
+      - kafka
+    ports:
+      - "8180:8080"
+    environment:
+      KAFKA_CLUSTERS_0_NAME: supplysense-local
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    networks:
+      - supplysense-network
+
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    container_name: supplysense-elasticsearch
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    networks:
+      - supplysense-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: supplysense-kibana
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    networks:
+      - supplysense-network
+
+  minio:
+    image: minio/minio:latest
+    container_name: supplysense-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minio_admin
+      MINIO_ROOT_PASSWORD: minio_dev_password
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio-data:/data
+    networks:
+      - supplysense-network
+
+  # ============================================================
+  # MONITORING
+  # ============================================================
+
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: supplysense-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - supplysense-network
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.enable-lifecycle'
+
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: supplysense-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/dashboards:/etc/grafana/provisioning/dashboards
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    networks:
+      - supplysense-network
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.52
+    container_name: supplysense-jaeger
+    ports:
+      - "16686:16686"
+      - "14268:14268"
+      - "6831:6831/udp"
+    networks:
+      - supplysense-network
+
+  # ============================================================
+  # BACKEND MICROSERVICES
+  # ============================================================
+
+  api-gateway:
+    build:
+      context: ../../backend/api-gateway
+      dockerfile: Dockerfile
+    container_name: supplysense-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_dev_password
+      AUTH_SERVICE_URL: http://auth-service:8081
+      SUPPLY_CHAIN_SERVICE_URL: http://supply-chain-service:8082
+      RISK_ENGINE_SERVICE_URL: http://risk-engine-service:8083
+      EVENT_PROCESSOR_SERVICE_URL: http://event-processor-service:8084
+      NOTIFICATION_SERVICE_URL: http://notification-service:8085
+      JWT_SECRET: supplysense_jwt_secret_key_for_development_only_change_in_prod
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/actuator/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  auth-service:
+    build:
+      context: ../../backend/auth-service
+      dockerfile: Dockerfile
+    container_name: supplysense-auth-service
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/supplysense
+      DATABASE_USERNAME: supplysense
+      DATABASE_PASSWORD: supplysense_dev_password
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_dev_password
+      JWT_SECRET: supplysense_jwt_secret_key_for_development_only_change_in_prod
+      JWT_EXPIRATION: 900000
+      JWT_REFRESH_EXPIRATION: 604800000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+
+  supply-chain-service:
+    build:
+      context: ../../backend/supply-chain-service
+      dockerfile: Dockerfile
+    container_name: supplysense-supply-chain
+    ports:
+      - "8082:8082"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/supplysense
+      DATABASE_USERNAME: supplysense
+      DATABASE_PASSWORD: supplysense_dev_password
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_dev_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+
+  risk-engine-service:
+    build:
+      context: ../../backend/risk-engine-service
+      dockerfile: Dockerfile
+    container_name: supplysense-risk-engine
+    ports:
+      - "8083:8083"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/supplysense
+      DATABASE_USERNAME: supplysense
+      DATABASE_PASSWORD: supplysense_dev_password
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_dev_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      AI_SERVICE_URL: http://ai-service:8090
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+
+  event-processor-service:
+    build:
+      context: ../../backend/event-processor-service
+      dockerfile: Dockerfile
+    container_name: supplysense-event-processor
+    ports:
+      - "8084:8084"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/supplysense
+      DATABASE_USERNAME: supplysense
+      DATABASE_PASSWORD: supplysense_dev_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      ELASTICSEARCH_HOST: elasticsearch
+      ELASTICSEARCH_PORT: 9200
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+
+  notification-service:
+    build:
+      context: ../../backend/notification-service
+      dockerfile: Dockerfile
+    container_name: supplysense-notification
+    ports:
+      - "8085:8085"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/supplysense
+      DATABASE_USERNAME: supplysense
+      DATABASE_PASSWORD: supplysense_dev_password
+      REDIS_HOST: redis
+      REDIS_PASSWORD: redis_dev_password
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: supplysense-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+    networks:
+      - supplysense-network
+
+  # ============================================================
+  # AI SERVICE
+  # ============================================================
+
+  ai-service:
+    build:
+      context: ../../ai-service
+      dockerfile: Dockerfile
+    container_name: supplysense-ai-service
+    ports:
+      - "8090:8090"
+    environment:
+      DATABASE_URL: postgresql://supplysense:supplysense_dev_password@postgres:5432/supplysense
+      REDIS_URL: redis://:redis_dev_password@redis:6379
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minio_admin
+      MINIO_SECRET_KEY: minio_dev_password
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      ENVIRONMENT: development
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - supplysense-network
+    volumes:
+      - ../../ai-service/models:/app/models
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.9.0
+    container_name: supplysense-mlflow
+    ports:
+      - "5000:5000"
+    command: mlflow server --host 0.0.0.0 --port 5000 --backend-store-uri sqlite:///mlflow.db --default-artifact-root /mlflow/artifacts
+    volumes:
+      - ./mlflow-data:/mlflow
+    networks:
+      - supplysense-network
+
+  # ============================================================
+  # FRONTEND
+  # ============================================================
+
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+      args:
+        API_URL: http://localhost:8080
+    container_name: supplysense-frontend
+    ports:
+      - "4200:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - supplysense-network

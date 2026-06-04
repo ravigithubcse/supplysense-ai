@@ -1,0 +1,55 @@
+server:
+  port: 8082
+spring:
+  application:
+    name: supply-chain-service
+  datasource:
+    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/supplysense}
+    username: ${DATABASE_USERNAME:supplysense}
+    password: ${DATABASE_PASSWORD:supplysense_dev_password}
+    hikari:
+      maximum-pool-size: 20
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        default_schema: supply_chain
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    schemas: supply_chain
+    baseline-on-migrate: true
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:redis_dev_password}
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+  cache:
+    type: redis
+    redis:
+      time-to-live: 300000
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+---
+spring:
+  config:
+    activate:
+      on-profile: docker
+  datasource:
+    url: jdbc:postgresql://postgres:5432/supplysense
+  data:
+    redis:
+      host: redis

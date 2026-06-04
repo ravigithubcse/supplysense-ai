@@ -1,0 +1,114 @@
+<div class="p-6">
+  <div class="mb-5">
+    <a routerLink="/suppliers" class="flex items-center gap-1.5 text-sm text-slate-400 hover:text-white transition mb-4">
+      <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18"/>
+      </svg>
+      Back to Suppliers
+    </a>
+  </div>
+
+  <div *ngIf="isLoading" class="space-y-4">
+    <div class="h-32 bg-slate-800 rounded-xl animate-pulse"></div>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="h-48 bg-slate-800 rounded-xl animate-pulse"></div>
+      <div class="h-48 bg-slate-800 rounded-xl animate-pulse"></div>
+    </div>
+  </div>
+
+  <div *ngIf="error" class="p-4 bg-red-500/10 border border-red-500/30 rounded-xl text-red-300 text-sm">{{ error }}</div>
+
+  <div *ngIf="supplier && !isLoading" class="space-y-5">
+
+    <!-- Header card -->
+    <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-6 flex items-start justify-between flex-wrap gap-4">
+      <div>
+        <h1 class="text-2xl font-bold text-white">{{ supplier.name }}</h1>
+        <p class="text-slate-400 text-sm font-mono mt-0.5">{{ supplier.code }}</p>
+        <div class="flex items-center gap-4 mt-3 text-sm text-slate-300">
+          <span class="flex items-center gap-1.5">
+            <svg class="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
+            </svg>
+            {{ supplier.city ? supplier.city + ', ' : '' }}{{ supplier.country }}
+          </span>
+          <span *ngIf="supplier.industry">{{ supplier.industry }}</span>
+        </div>
+      </div>
+      <span class="px-3 py-1.5 rounded-full text-sm font-semibold border"
+        [ngClass]="{
+          'bg-green-500/10 text-green-400 border-green-500/20': supplier.status === 'ACTIVE',
+          'bg-yellow-500/10 text-yellow-400 border-yellow-500/20': supplier.status === 'PROBATION',
+          'bg-red-500/10 text-red-400 border-red-500/20': supplier.status === 'BLACKLISTED',
+          'bg-slate-500/10 text-slate-400 border-slate-500/20': supplier.status === 'INACTIVE'
+        }">
+        {{ supplier.status }}
+      </span>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+
+      <!-- Performance scores -->
+      <div class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+        <h2 class="text-sm font-semibold text-white mb-4">Performance Scores</h2>
+        <div class="space-y-4">
+          <div *ngFor="let metric of [
+              {label: 'Reliability', value: supplier.reliabilityScore, color: 'bg-blue-500'},
+              {label: 'Quality',     value: supplier.qualityScore,     color: 'bg-purple-500'},
+              {label: 'Delivery',    value: supplier.deliveryScore,    color: 'bg-cyan-500'}
+          ]">
+            <div class="flex justify-between text-sm mb-1">
+              <span class="text-slate-400">{{ metric.label }}</span>
+              <span class="text-white font-medium">{{ metric.value }}%</span>
+            </div>
+            <div class="h-2 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full rounded-full transition-all" [ngClass]="metric.color" [style.width]="metric.value + '%'"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Risk breakdown -->
+      <div *ngIf="riskDetail" class="bg-slate-800/60 border border-slate-700/50 rounded-xl p-5">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-sm font-semibold text-white">Risk Analysis</h2>
+          <span class="text-2xl font-bold" [ngClass]="getRiskColor(riskDetail.compositeScore)">
+            {{ riskDetail.compositeScore | number:'1.1-1' }}
+          </span>
+        </div>
+        <div class="space-y-3">
+          <div *ngFor="let factor of [
+              {label: 'Geopolitical', score: riskDetail.geopoliticalScore},
+              {label: 'Weather',      score: riskDetail.weatherScore},
+              {label: 'Financial',    score: riskDetail.financialScore},
+              {label: 'Logistics',    score: riskDetail.logisticsScore},
+              {label: 'Sentiment',    score: riskDetail.sentimentScore}
+          ]">
+            <div class="flex justify-between text-xs mb-1">
+              <span class="text-slate-400">{{ factor.label }}</span>
+              <span class="font-mono" [ngClass]="getRiskColor(factor.score)">{{ factor.score | number:'1.1-1' }}</span>
+            </div>
+            <div class="h-1.5 bg-slate-700 rounded-full overflow-hidden">
+              <div class="h-full rounded-full" [ngClass]="getScoreBarColor(factor.score)" [style.width]="factor.score + '%'"></div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-4 grid grid-cols-2 gap-3 pt-3 border-t border-slate-700/50">
+          <div class="text-center">
+            <p class="text-xs text-slate-400">7-day forecast</p>
+            <p class="text-lg font-bold mt-0.5" [ngClass]="getRiskColor(riskDetail.forecastScore7d)">
+              {{ riskDetail.forecastScore7d | number:'1.1-1' }}
+            </p>
+          </div>
+          <div class="text-center">
+            <p class="text-xs text-slate-400">30-day forecast</p>
+            <p class="text-lg font-bold mt-0.5" [ngClass]="getRiskColor(riskDetail.forecastScore30d)">
+              {{ riskDetail.forecastScore30d | number:'1.1-1' }}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
