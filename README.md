@@ -274,6 +274,70 @@ supplysense-ai/
 
 ---
 
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    Client["🌐 Angular 17 SPA  :4200\nNgRx · Tailwind · WebSocket · Chart.js"]
+
+    subgraph GW["🔀 Spring Cloud Gateway  :8080"]
+        G1["JWT Auth Filter · Rate Limiting · Circuit Breaker"]
+    end
+
+    subgraph SVC["☕ Spring Boot Microservices  (Java 21)"]
+        S1["🔐 Auth Svc\n:8081"]
+        S2["🏭 Supply Chain Svc\n:8082"]
+        S3["⚠️ Risk Engine\n:8083 · WebFlux"]
+        S4["📡 Event Processor\n:8084 · Kafka→WS"]
+        S5["🔔 Notif Svc\n:8085"]
+    end
+
+    subgraph ML["🐍 AI Service  :8090"]
+        M1["FastAPI · PyTorch"]
+        M2["LSTM + Prophet\n7/30-day Forecasts"]
+        M3["RoBERTa NLP\nSentiment Analysis"]
+        M4["Isolation Forest\nAnomaly Detection"]
+    end
+
+    subgraph DATA["🗄️ Data Layer"]
+        D1["🐘 PostgreSQL\n+ TimescaleDB"]
+        D2["📨 Apache Kafka 3.6"]
+        D3["⚡ Redis 7.2"]
+    end
+
+    Client --> GW --> S1 & S2 & S3 & S4 & S5
+    S2 & S3 --> ML
+    ML --> M1 --> M2 & M3 & M4
+    S1 <--> D3
+    S2 <--> D1
+    S3 & S4 <-->|Topics| D2
+    D2 --> S4 -->|WebSocket| Client
+
+    classDef client fill:#0d47a1,stroke:#42a5f5,color:#e3f2fd
+    classDef gw fill:#1a237e,stroke:#7986cb,color:#e8eaf6
+    classDef svc fill:#1b5e20,stroke:#66bb6a,color:#e8f5e9
+    classDef ml fill:#4a148c,stroke:#ba68c8,color:#f3e5f5
+    classDef data fill:#3e2723,stroke:#ff8a65,color:#fbe9e7
+    class Client client
+    class G1 gw
+    class S1,S2,S3,S4,S5 svc
+    class M1,M2,M3,M4 ml
+    class D1,D2,D3 data
+```
+
+**Request Flow:**
+1. **Angular 17 SPA** connects through HTTPS (REST) and WSS (WebSocket) for live risk score streaming
+2. **Spring Cloud Gateway** validates JWTs, enforces per-IP rate limits, and trips circuit breakers on failures
+3. **Supply Chain Service** manages supplier/product/route CRUD with TimescaleDB time-series caching
+4. **Risk Engine** (WebFlux reactive) orchestrates composite 0–100 risk scores updated every 5 minutes
+5. **AI Service** (FastAPI + PyTorch) runs LSTM + Prophet ensembles for 7-day and 30-day disruption forecasts
+6. **RoBERTa NLP** scans 100K+ news sources per supplier for real-time sentiment signals
+7. **Kafka** fan-out delivers risk events to the **Event Processor**, which bridges to WebSocket for the UI
+8. **Redis** blacklists revoked JWT tokens and caches hot supplier scores for sub-millisecond reads
+
+---
+
 ## 👨‍💻 Author
 
 <div align="center">
