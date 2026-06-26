@@ -47,50 +47,77 @@ SupplySense AI is a **production-grade supply chain risk intelligence platform**
 
 ---
 
-## 📐 Architecture
+## 🏗️ Architecture
 
+```mermaid
+flowchart TB
+    Client["🌐 Angular 17 SPA  :4200
+NgRx · Tailwind CSS · WebSocket · Chart.js"]
+
+    subgraph GW["🔀 Spring Cloud Gateway  :8080"]
+        G1["JWT Auth Filter · Rate Limiting · Circuit Breaker"]
+    end
+
+    subgraph SVC["☕ Spring Boot Microservices  (Java 21)"]
+        S1["🔐 Auth Svc
+:8081"]
+        S2["🏭 Supply Chain Svc
+:8082"]
+        S3["⚠️ Risk Engine
+:8083 · WebFlux"]
+        S4["📡 Event Processor
+:8084 · Kafka→WS"]
+        S5["🔔 Notif Svc
+:8085"]
+    end
+
+    subgraph ML["🐍 AI Service  :8090"]
+        M1["FastAPI · PyTorch"]
+        M2["LSTM + Prophet
+7/30-day Forecasts"]
+        M3["RoBERTa NLP
+Sentiment Analysis"]
+        M4["Isolation Forest
+Anomaly Detection"]
+    end
+
+    subgraph DATA["🗄️ Data Layer"]
+        D1["🐘 PostgreSQL + TimescaleDB"]
+        D2["📨 Apache Kafka 3.6"]
+        D3["⚡ Redis 7.2"]
+    end
+
+    Client --> GW --> S1 & S2 & S3 & S4 & S5
+    S2 & S3 --> ML
+    ML --> M1 --> M2 & M3 & M4
+    S1 <--> D3
+    S2 <--> D1
+    S3 & S4 <-->|Topics| D2
+    D2 --> S4 -->|WebSocket| Client
+
+    classDef client fill:#0d47a1,stroke:#42a5f5,color:#e3f2fd
+    classDef gw fill:#1a237e,stroke:#7986cb,color:#e8eaf6
+    classDef svc fill:#1b5e20,stroke:#66bb6a,color:#e8f5e9
+    classDef ml fill:#4a148c,stroke:#ba68c8,color:#f3e5f5
+    classDef data fill:#3e2723,stroke:#ff8a65,color:#fbe9e7
+    class Client client
+    class G1 gw
+    class S1,S2,S3,S4,S5 svc
+    class M1,M2,M3,M4 ml
+    class D1,D2,D3 data
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Angular 17 SPA (Port 4200)                   │
-│              NgRx · Tailwind CSS · WebSocket · Chart.js              │
-└───────────────────────────┬─────────────────────────────────────────┘
-                            │ HTTPS / WSS
-┌───────────────────────────▼─────────────────────────────────────────┐
-│              Spring Cloud Gateway (Port 8080)                        │
-│         JWT Auth Filter · Rate Limiting · Circuit Breaker            │
-└──┬──────────┬──────────┬──────────┬──────────┬──────────────────────┘
-   │          │          │          │          │
-┌──▼──┐  ┌───▼───┐  ┌───▼───┐  ┌──▼──┐  ┌───▼────┐  ┌────────────┐
-│Auth │  │Supply │  │ Risk  │  │Event│  │Notif.  │  │ AI Service │
-│:8081│  │Chain  │  │Engine │  │Proc.│  │:8085   │  │ :8090      │
-│     │  │:8082  │  │:8083  │  │:8084│  │        │  │ FastAPI    │
-└──┬──┘  └───┬───┘  └───┬───┘  └──┬──┘  └───┬────┘  │ PyTorch    │
-   │         │          │         │          │       └────────────┘
-   └─────────┴──────────┴────┬────┴──────────┘
-                             │
-        ┌────────────────────┼──────────────────────┐
-        │                    │                       │
-   ┌────▼────┐         ┌─────▼────┐           ┌─────▼─────┐
-   │Postgres │         │  Kafka   │           │  Redis    │
-   │+Timescale│        │  3.6     │           │  7.2      │
-   └─────────┘         └──────────┘           └───────────┘
-```
 
-### Microservices
-
-| Service | Port | Technology | Responsibility |
-|---|---|---|---|
-| **API Gateway** | 8080 | Spring Cloud Gateway | JWT auth, rate limiting, routing, circuit breaker |
-| **Auth Service** | 8081 | Spring Boot + Security | Login/register, JWT/refresh tokens, RBAC |
-| **Supply Chain Service** | 8082 | Spring Boot + JPA | Supplier/product/route CRUD, caching |
-| **Risk Engine Service** | 8083 | Spring Boot + WebFlux | Risk orchestration, alerts, what-if scenarios |
-| **Event Processor** | 8084 | Spring Boot + Kafka | Kafka→WebSocket bridge, real-time fan-out |
-| **Notification Service** | 8085 | Spring Boot + Mail | Email, Slack, in-app multi-channel delivery |
-| **AI Service** | 8090 | FastAPI + PyTorch | ML predictions, sentiment analysis, anomaly detection |
-| **Frontend** | 4200 | Angular 17 + NgRx | SPA dashboard, real-time UI |
+**Request Flow:**
+1. **Angular 17 SPA** connects through HTTPS (REST) and WSS (WebSocket) for live risk score streaming
+2. **Spring Cloud Gateway** validates JWTs, enforces per-IP rate limits, and trips circuit breakers on failures
+3. **Supply Chain Service** manages supplier/product/route CRUD with TimescaleDB time-series caching
+4. **Risk Engine** (WebFlux reactive) orchestrates composite 0–100 risk scores updated every 5 minutes
+5. **AI Service** (FastAPI + PyTorch) runs LSTM + Prophet ensembles for 7-day and 30-day disruption forecasts
+6. **RoBERTa NLP** scans 100K+ news sources per supplier for real-time sentiment signals
+7. **Kafka** fan-out delivers risk events to the **Event Processor**, which bridges to WebSocket for the UI
+8. **Redis** blacklists revoked JWT tokens and caches hot supplier scores for sub-millisecond reads
 
 ---
-
 ## 🚀 Quick Start
 
 ### Prerequisites
@@ -279,29 +306,38 @@ supplysense-ai/
 
 ```mermaid
 flowchart TB
-    Client["🌐 Angular 17 SPA  :4200\nNgRx · Tailwind · WebSocket · Chart.js"]
+    Client["🌐 Angular 17 SPA  :4200
+NgRx · Tailwind CSS · WebSocket · Chart.js"]
 
     subgraph GW["🔀 Spring Cloud Gateway  :8080"]
         G1["JWT Auth Filter · Rate Limiting · Circuit Breaker"]
     end
 
     subgraph SVC["☕ Spring Boot Microservices  (Java 21)"]
-        S1["🔐 Auth Svc\n:8081"]
-        S2["🏭 Supply Chain Svc\n:8082"]
-        S3["⚠️ Risk Engine\n:8083 · WebFlux"]
-        S4["📡 Event Processor\n:8084 · Kafka→WS"]
-        S5["🔔 Notif Svc\n:8085"]
+        S1["🔐 Auth Svc
+:8081"]
+        S2["🏭 Supply Chain Svc
+:8082"]
+        S3["⚠️ Risk Engine
+:8083 · WebFlux"]
+        S4["📡 Event Processor
+:8084 · Kafka→WS"]
+        S5["🔔 Notif Svc
+:8085"]
     end
 
     subgraph ML["🐍 AI Service  :8090"]
         M1["FastAPI · PyTorch"]
-        M2["LSTM + Prophet\n7/30-day Forecasts"]
-        M3["RoBERTa NLP\nSentiment Analysis"]
-        M4["Isolation Forest\nAnomaly Detection"]
+        M2["LSTM + Prophet
+7/30-day Forecasts"]
+        M3["RoBERTa NLP
+Sentiment Analysis"]
+        M4["Isolation Forest
+Anomaly Detection"]
     end
 
     subgraph DATA["🗄️ Data Layer"]
-        D1["🐘 PostgreSQL\n+ TimescaleDB"]
+        D1["🐘 PostgreSQL + TimescaleDB"]
         D2["📨 Apache Kafka 3.6"]
         D3["⚡ Redis 7.2"]
     end
@@ -337,7 +373,6 @@ flowchart TB
 8. **Redis** blacklists revoked JWT tokens and caches hot supplier scores for sub-millisecond reads
 
 ---
-
 ## 👨‍💻 Author
 
 <div align="center">
